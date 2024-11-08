@@ -68,12 +68,7 @@ bootstrapApplication(AppComponent, {
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     { provide: HTTP_INTERCEPTORS, useClass: HttpErrorInterceptor, multi: true },
     provideHttpClient(withInterceptors([authInterceptor()])),
-    provideRouter(routes),
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: HttpErrorInterceptor,
-      multi: true,
-    }
+    provideRouter(routes)
   ],
 });
 export function httpTranslateLoader(http: HttpClient) {

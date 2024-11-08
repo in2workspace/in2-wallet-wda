@@ -7,11 +7,11 @@ import { environment } from 'src/environments/environment';
   providedIn: 'root',
 })
 export class DataService {
-  private didSubject = new BehaviorSubject<string>('');
+  private didSubject = new BehaviorSubject<string|undefined>(undefined);
 
   public constructor(private http: HttpClient) {}
 
-  public listenDid(): BehaviorSubject<string> {
+  public listenDid(): BehaviorSubject<string|undefined> {
     return this.didSubject;
   }
 

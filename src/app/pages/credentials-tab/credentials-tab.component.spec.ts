@@ -1,17 +1,17 @@
 import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 
-import { CredentialsFrameComponent } from './credentials-frame.component';
+import { CredentialsTabComponent } from './credentials-tab.component';
 
-describe('CredentialsFrameComponent', () => {
-  let component: CredentialsFrameComponent;
-  let fixture: ComponentFixture<CredentialsFrameComponent>;
+describe('CredentialsTabComponent', () => {
+  let component: CredentialsTabComponent;
+  let fixture: ComponentFixture<CredentialsTabComponent>;
 
   beforeEach(waitForAsync(() => {
     TestBed.configureTestingModule({
-      imports: [CredentialsFrameComponent],
+      imports: [CredentialsTabComponent],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(CredentialsFrameComponent);
+    fixture = TestBed.createComponent(CredentialsTabComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   }));

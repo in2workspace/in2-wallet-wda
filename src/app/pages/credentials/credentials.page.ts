@@ -1,16 +1,19 @@
-import { ChangeDetectorRef, Component, inject, Input, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, Signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AlertController, IonicModule } from '@ionic/angular';
+import { IonicModule } from '@ionic/angular';
 import { StorageService } from 'src/app/services/storage.service';
 import { QRCodeModule } from 'angularx-qrcode';
 import { WalletService } from 'src/app/services/wallet.service';
 import { VcViewComponent } from '../../components/vc-view/vc-view.component';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { TranslateModule } from '@ngx-translate/core';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { WebsocketService } from 'src/app/services/websocket.service';
 import { DataService } from 'src/app/services/data.service';
 import { VerifiableCredential } from 'src/app/interfaces/verifiable-credential';
+import { catchError, EMPTY, map, Observable, of, Subject, switchMap, tap } from 'rxjs';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { HttpErrorResponse } from '@angular/common/http';
 
 //TODO unsubscribe
 
@@ -32,37 +35,48 @@ import { VerifiableCredential } from 'src/app/interfaces/verifiable-credential';
 })
 // eslint-disable-next-line @angular-eslint/component-class-suffix
 export class CredentialsPage implements OnInit {
-  // public alertButtons = ['OK'];
-  public credList: Array<VerifiableCredential> = [];
-
-
-  private TIME_IN_MS = 3000;
-  public toggleScan = false;
-  public scaned_cred = false;
-
-  public credOfferEndpoint = '';
-  public from = '';
-  public credentialOfferUri = '';
-
-  public ebsiFlag = false;
-  public did = '';
-
-  private walletService = inject(WalletService);
-  private router = inject(Router);
-  private websocket = inject(WebsocketService);
+  private destroyRef = inject(DestroyRef);
   private dataService = inject(DataService);
   private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private walletService = inject(WalletService);
+  private websocket = inject(WebsocketService);
+
+  //Reducer actions for reactive state
+  //todo can just be a signal, and credList$ computed, while loadedCredential is the only action that updates
+  public loadedCredentialsSubj = new Subject<VerifiableCredential[]>();
+  public loadedCredentials$ = this.loadedCredentialsSubj.asObservable();
+
+  //Reactive state
+  credList$: Signal<VerifiableCredential[]> = toSignal(this.loadedCredentials$, 
+    {initialValue:[]}
+  );
+
+  //Non-reactive state //todo make signals?
+  public showOfferSuccessPopup: boolean = false;
+  public ebsiFlag: boolean = false;
+  public did: undefined|string = undefined;
+  public from: undefined|string = undefined; //todo consider to remove
+  public credentialOfferUri: undefined|string = undefined;
+
+  //Other fields
+  private TIME_IN_MS: number = 3000;
+  public credOfferEndpoint: string = window.location.origin + '/tabs/credentials';
+
 
   public constructor(){
-    // ? add "/list"?
-    this.credOfferEndpoint = window.location.origin + '/tabs/credentials';
-    this.route.queryParams.subscribe((params) => {
-      this.from = params['from'];
+    this.route.queryParams
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((params) => {
+      this.from = params['from']; //todo consider to remove
       this.credentialOfferUri = params['credentialOfferUri'];
     });
 
-    this.dataService.listenDid().subscribe((data: any) => {
-      if (data != '') {
+    //todo consider moving to settings
+    this.dataService.listenDid()
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe((data: any) => {
+      if (data !== undefined) {
         this.ebsiFlag = true;
         this.did = data;
       }
@@ -71,68 +85,107 @@ export class CredentialsPage implements OnInit {
   }
 
   public ngOnInit() {
-    this.fetchCredentials();
+    this.loadCredentials()
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe(()=>{
+      if(this.route.snapshot.queryParams['scaned_cred']){
+        this.openOfferSuccessPopup();
+      }
+    });
+
     // TODO: Find a better way to handle this
     if (this.credentialOfferUri !== undefined) {
       this.generateCred();
     }
   }
 
-  public fetchCredentials() {
-    this.walletService
-      .getAllVCs()
-      .subscribe((credentialListResponse: VerifiableCredential[]) => {
-        this.credList = credentialListResponse.slice().reverse();
-
-        const scaned_cred_param = this.route.snapshot.params['scaned_cred'];
-        if(scaned_cred_param){
-              this.scaned_cred = true;
-              setTimeout(() => {
-                this.scaned_cred = false;
-              }, this.TIME_IN_MS);
-        }
-      });
+  public loadCredentials(): Observable<VerifiableCredential[]> {
+    return this.walletService.getAllVCs()
+    // return timer(3000) //todo remove: mock
+    .pipe(
+      // map(()=>mockVCList), //todo remove: mock
+      map(vcs=>vcs.reverse()),
+      tap(vcs=>{
+        this.loadedCredentialsSubj.next(vcs)
+      }
+      ),
+    catchError((err:HttpErrorResponse)=>{
+      if(err.status===404){
+        return of([]);
+      }else{
+        console.log('Since there was an error loading credentials, the stream is cut.')
+        return EMPTY;
+      }
+    }))
   }
 
-  //todo don't show last VC after delete
-  //todo is it really necessary to re-fetch VCs?
+  public openOfferSuccessPopup(){
+    console.log('open popup')
+    this.showOfferSuccessPopup = true;
+    setTimeout(() => {
+      this.showOfferSuccessPopup = false;
+    }, this.TIME_IN_MS);
+  }
+
+  //todo: currently when you only have one VC and is deleted it doesn't disappear, 
+  //todo probably because the 404 error is not managed correctly
   public vcDelete(cred: VerifiableCredential) {
-    this.walletService.deleteVC(cred.id).subscribe(() => {
-      this.fetchCredentials();
+    this.walletService.deleteVC(cred.id)
+    .pipe(
+      //todo is it really necessary to re-fetch VCs? if response is valid, no need to
+      switchMap(()=>this.loadCredentials()),
+      takeUntilDestroyed(this.destroyRef)
+    )
+    .subscribe(() => {
+      console.log('Cred list updated after deleting credential: ' + cred);
     });
   }
 
   public generateCred() {
     this.websocket.connect();
 
-    // todo remove delay, continue when websocket connection is stable
+// TODO: Instead of using a delay, we should wait for the websocket connection to be established
     this.delay(1000).then(() => {
-      this.walletService.requestCredential(this.credentialOfferUri).subscribe({
+      if(!this.credentialOfferUri) return
+      this.walletService.requestCredential(this.credentialOfferUri).
+      pipe(
+        //todo is it really necessary to re-fetch VCs? maybe just add new one?
+        switchMap(this.loadCredentials),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
         next: () => {
-          //todo is it really necessary to re-fetch VCs?
-          this.fetchCredentials();
-          this.websocket.closeConnection();
+          this.websocket.closeConnection() //todo use finalize or other
           //todo feedback for success?
         },
         error: (err) => {
+          this.websocket.closeConnection(); //todo use finalize or other
           console.error(err);
-          this.websocket.closeConnection();
-        },
+        }
       });
-      //todo add some logic to reset from and credentialOfferUri
+      //todo consider adding some logic to reset from and credentialOfferUri
     });
+  }
+
+  public navigateWithParamsTo(uri:string){
+    this.router.navigate(
+      [uri], 
+      {
+        queryParams:{scaned_cred:'true'}, 
+        queryParamsHandling: 'preserve'
+      });
   }
 
   public handleButtonKeydown(event: KeyboardEvent, action: string): void {
     if (event.key === 'Enter' || event.key === ' ') {
       if (action === 'scan') {
-        this.router.navigate(['/tabs/settings'], {queryParamsHandling: 'preserve'});
+        this.navigateWithParamsTo('tabs/credentials/scanner');
       }
       event.preventDefault();
     }
   }
 
-  //todo avoid or, at least, refactor
+  //todo avoid, look for an alternative
   private delay(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -142,6 +195,7 @@ export class CredentialsPage implements OnInit {
     let text = '';
 
     if (textToCopy === 'did-text') {
+      //todo use angular view models
       const didTextElement = document.getElementById('did-text');
 
       if (didTextElement) {

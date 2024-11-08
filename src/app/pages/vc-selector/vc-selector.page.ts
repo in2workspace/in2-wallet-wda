@@ -126,6 +126,7 @@ export class VcSelectorPage implements OnInit {
     }
   }
   private async errorMessage(){
+    //todo why this error popup here but in other places toast is used
     const alert = await this.alertController.create({
       header: this.translate.instant('vc-selector.ko-message'),
       message: '<img src="../assets/icon/Tick/close-circle-outline.svg" color="red"alt="g-maps" class="vs-selector-alert">',

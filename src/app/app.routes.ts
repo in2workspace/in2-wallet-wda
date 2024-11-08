@@ -17,8 +17,8 @@ export const routes: Routes = [
         path: 'credentials',
         canActivate: [AutoLoginPartialRoutesGuard],
         loadComponent: () =>
-          import('./pages/credentials-frame/credentials-frame.component').then(
-            (m) => m.CredentialsFrameComponent
+          import('./pages/credentials-tab/credentials-tab.component').then(
+            (m) => m.CredentialsTabComponent
           ),
           children: [
             {

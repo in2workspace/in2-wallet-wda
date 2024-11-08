@@ -78,6 +78,7 @@ export class BarcodeScannerComponent implements OnInit {
     });
     }
   public ngOnInit(): void {
+    //todo remove here or in camera.service
     setTimeout(() => {
       this.cameraService.updateCamera();
     }, 2000);

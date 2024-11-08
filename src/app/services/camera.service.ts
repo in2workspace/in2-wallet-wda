@@ -16,6 +16,7 @@ export class CameraService {
     );
 
   public constructor(private storageService: StorageService) {
+    //todo remove here or in barcode component
     this.updateCamera();
   }
 
