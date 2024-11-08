@@ -88,6 +88,7 @@ export class CredentialsPage implements OnInit {
     this.loadCredentials()
     .pipe(takeUntilDestroyed(this.destroyRef))
     .subscribe(()=>{
+      //todo maybe would be better as an effect
       if(this.route.snapshot.queryParams['scaned_cred']){
         this.openOfferSuccessPopup();
       }
@@ -111,10 +112,11 @@ export class CredentialsPage implements OnInit {
       ),
     catchError((err:HttpErrorResponse)=>{
       if(err.status===404){
+        this.loadedCredentialsSubj.next([]);
         return of([]);
       }else{
         console.log('Since there was an error loading credentials, the stream is cut.')
-        return EMPTY;
+        return EMPTY; //todo maybe should emeit [] too?
       }
     }))
   }
@@ -150,7 +152,7 @@ export class CredentialsPage implements OnInit {
       this.walletService.requestCredential(this.credentialOfferUri).
       pipe(
         //todo is it really necessary to re-fetch VCs? maybe just add new one?
-        switchMap(this.loadCredentials),
+        switchMap(()=>this.loadCredentials()),
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
@@ -170,8 +172,7 @@ export class CredentialsPage implements OnInit {
   public navigateWithParamsTo(uri:string){
     this.router.navigate(
       [uri], 
-      {
-        queryParams:{scaned_cred:'true'}, 
+      { 
         queryParamsHandling: 'preserve'
       });
   }

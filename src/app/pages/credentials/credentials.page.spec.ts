@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick, waitForAsync } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, flush, tick, waitForAsync } from '@angular/core/testing';
 import { AlertController, IonButton, IonicModule } from '@ionic/angular';
 import { TranslateModule } from '@ngx-translate/core';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -12,8 +12,9 @@ import { AuthenticationService } from 'src/app/services/authentication.service';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { CredentialStatus, VerifiableCredential } from 'src/app/interfaces/verifiable-credential';
 import { Storage } from '@ionic/storage-angular';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { DestroyRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { mockVCList } from 'src/assets/mocks/verifiable-credential.mock';
+import { HttpErrorResponse } from '@angular/common/http';
 
 
 class MockRouter {
@@ -37,6 +38,7 @@ describe('CredentialsPage', () => {
   let mockRouter: MockRouter;
   let dataServiceSpyObj: jest.Mocked<any>;
   let alertController: AlertController;
+  let mockRoute: any;
 
   const TIME_IN_MS = 10000;
 
@@ -71,6 +73,23 @@ describe('CredentialsPage', () => {
       }),
     } as any;
 
+    mockRoute = {
+      queryParams: of({ 
+        toggleScan: 'toggle scan value',
+        from: 'from value',
+        show_qr: 'show_qr value',
+        credentialOfferUri:'credentialOfferUri value'
+       }),
+      snapshot: {
+        routeConfig: {
+          path: 'credentials'
+        },
+        queryParams: {
+          scaned_cred: false
+        }
+      }
+    };
+
     TestBed.configureTestingModule({
       schemas:[NO_ERRORS_SCHEMA],
       imports: [
@@ -81,26 +100,14 @@ describe('CredentialsPage', () => {
       ],
       providers: [
         Storage,
+        DestroyRef,
         { provide: Router, useValue: mockRouter},
         { provide: AlertController, useValue: alertController },
         { provide: WalletService, useValue: walletServiceSpy },
         { provide: DataService, useValue: dataServiceSpyObj },
         { provide: AuthenticationService, useValue: authServiceSpyObj },
         {
-          provide: ActivatedRoute,
-          useValue: {
-            queryParams: of({ 
-              toggleScan: 'toggle scan value',
-              from: 'from value',
-              show_qr: 'show_qr value',
-              credentialOfferUri:'credentialOfferUri value'
-             }),
-            snapshot: {
-              routeConfig: {
-                path: 'credentials'
-              }
-            }
-          },
+          provide: ActivatedRoute, useValue: mockRoute
         },
       ],
     })
@@ -126,60 +133,48 @@ describe('CredentialsPage', () => {
   });
 
   it('should take query params to initialize properties', ()=>{
-    expect(component.toggleScan).toBe('toggle scan value');
     expect(component.from).toBe('from value');
-    expect(component.show_qr).toBe('show_qr value');
     expect(component.credentialOfferUri).toBe('credentialOfferUri value');
   });
 
-  it('did and ebsiFlag should be initialized',()=>{
+  it('did and ebsiFlag should be initialized if listenDid is not undefined',()=>{
     expect(component.ebsiFlag).toBe(true);
     expect(component.did).toBe('someDidValue');
-  })
+  });
 
-  it('did and ebsiflag should not be initialized if listen emits empty string', ()=>{
-    dataServiceSpyObj.listenDid.mockReturnValue(of(''));
+  it('did and ebsiflag should not be initialized if listenDid emits empty string', ()=>{
+    dataServiceSpyObj.listenDid.mockReturnValue(of(undefined));
     component.ebsiFlag = false;
-    component.did = '';
+    component.did = undefined;
     dataServiceSpyObj.listenDid().subscribe(()=>{
       expect(component.ebsiFlag).toBe(false);
-      expect(component.did).toBe('');
+      expect(component.did).toBe(undefined);
     });
   });
 
-  it('ngOnInit should initialize component properties and fetch credentials', () => {
+  it('ngOnInit should fetch credentials', () => {
     walletServiceSpy.getAllVCs.mockReturnValue(of([]));
-    jest.spyOn(component, 'generateCred');
-    jest.spyOn(component, 'fetchCredentials');
+    jest.spyOn(component, 'loadCredentials');
+    jest.spyOn(component, 'openOfferSuccessPopup');
     component.ngOnInit();
-    expect(component.scaned_cred).toBe(false);
-    expect(component.fetchCredentials).toHaveBeenCalled();
+    expect(component.loadCredentials).toHaveBeenCalled();
+    expect(component.openOfferSuccessPopup).not.toHaveBeenCalled();
+  });
+
+  it('open popup fn should be opened on init if scaned_cred is true', () => {
+    mockRoute.snapshot.queryParams['scaned_cred'] = true;
+    jest.spyOn(component, 'openOfferSuccessPopup');
+
+    component.ngOnInit();
+    expect(component.openOfferSuccessPopup).toHaveBeenCalled();
+  });
+
+  it('should generate credentials on init', () => {
+    component.credentialOfferUri = 'uri';
+    jest.spyOn(component, 'generateCred');
+
+    component.ngOnInit();
     expect(component.generateCred).toHaveBeenCalled();
-  });
-
-  it('should untoggle scan and call detectChanges when navigation is outside /tabs/credentials', () => {
-    const mockNavigationEndEvent = new NavigationEnd(42, '/tabs/credentials', '/new-url/tabs/other-section');
-    walletServiceSpy.getAllVCs.mockReturnValue(of([]));
-
-    const untoggleScanSpy = jest.spyOn(component, 'untoggleScan');
-    const detectChangesSpy = jest.spyOn(component['cdr'], 'detectChanges').mockImplementation(()=>{});
-
-    mockRouter.events.next(mockNavigationEndEvent);
-
-    expect(untoggleScanSpy).toHaveBeenCalled();
-    expect(detectChangesSpy).toHaveBeenCalled();
-  });
-
-  it('should not untoggle scan if the destination starts with /tabs/credentials', () => {
-    const mockNavigationEndEvent = new NavigationEnd(42, '/tabs/credentials', '/tabs/credentials/some-subroute');
-    walletServiceSpy.getAllVCs.mockReturnValue(of([]));
-    const untoggleScanSpy = jest.spyOn(component, 'untoggleScan');
-    const detectChangesSpy = jest.spyOn(component['cdr'], 'detectChanges');
-
-    jest.spyOn(mockRouter.events, 'pipe').mockReturnValue(of(mockNavigationEndEvent));
-
-    expect(untoggleScanSpy).not.toHaveBeenCalled();
-    expect(detectChangesSpy).not.toHaveBeenCalled();
   });
 
   it('should not generate credential if credentialOfferUri (from query params) is undefined', ()=>{
@@ -187,14 +182,215 @@ describe('CredentialsPage', () => {
     jest.spyOn(component, 'generateCred');
     component.ngOnInit();
     expect(component.generateCred).toHaveBeenCalledTimes(0);
-  })
-
-  it('should enable scan mode when scan is called', () => {
-    component.scan();
-    expect(component.toggleScan).toBe(true);
-    expect(component.show_qr).toBe(true);
-    expect(component.ebsiFlag).toBe(false);
   });
+
+  it('should open and close success popup', fakeAsync(()=>{
+    component.openOfferSuccessPopup();
+
+    expect(component.showOfferSuccessPopup).toBe(true);
+    tick(TIME_IN_MS);
+    expect(component.showOfferSuccessPopup).toBe(false);
+  }));
+
+  it('should update the credential list when fetchCredentials is called', fakeAsync(() => {
+    const mockCredList: VerifiableCredential[] = mockVCList;
+    const nextSpy = jest.spyOn(component.loadedCredentialsSubj, 'next');
+    walletServiceSpy.getAllVCs.mockReturnValue(of(mockCredList));
+    const reversedList = mockCredList.reverse();
+
+    component.loadCredentials().subscribe(vcs => {
+      expect(walletServiceSpy.getAllVCs).toHaveBeenCalled();
+      expect(nextSpy).toHaveBeenCalledWith(reversedList);
+      expect(vcs).toEqual(reversedList);
+    });
+
+    flush();
+
+}));
+
+it('no credentials should return and update credentials list as empty', fakeAsync(()=>{
+  const nextSpy = jest.spyOn(component.loadedCredentialsSubj, 'next');
+
+  (walletServiceSpy as any).getAllVCs
+  .mockReturnValue(throwError(()=>new HttpErrorResponse({
+    status:404
+  })));
+  component.loadCredentials().subscribe(vcs =>{
+    console.log('vcs: ')
+    console.log(vcs);
+    expect(vcs).toEqual([]);
+    expect(nextSpy).toHaveBeenCalledWith([]);
+  });
+
+  flush();
+
+}));
+
+it('any other error than 404 should cut the stream', fakeAsync(()=>{
+  const nextSpy = jest.spyOn(component.loadedCredentialsSubj, 'next');
+
+  (walletServiceSpy as any).getAllVCs
+  .mockReturnValue(throwError(()=>new HttpErrorResponse({
+    status:500
+  })));
+  let loadCredentialHasEmitted = false;
+  component.loadCredentials().subscribe(vcs =>{
+    loadCredentialHasEmitted = true;
+  });
+
+  flush();
+
+  expect(loadCredentialHasEmitted).toBe(false);
+  expect(nextSpy).not.toHaveBeenCalled();
+
+}));
+
+it('vcDelete should call deleteVC on the wallet service with the correct ID and fetchCredentials the list', fakeAsync(() => {
+  const testCredential: VerifiableCredential = {
+    "@context": ["https://www.w3.org/ns/credentials/v2"],
+    "id": "testCredentialId",
+    "type": ["VerifiableCredential", "SomeType"],
+    "issuer": {
+      "id": "issuerId1"
+    },
+    "issuanceDate": "2024-04-02T09:23:22.637345122Z",
+    "validFrom": "2024-04-02T09:23:22.637345122Z",
+    "expirationDate": "2025-04-02T09:23:22.637345122Z",
+    "credentialSubject": {
+      "mandate": {
+        "id": "mandateId1",
+        "mandator": {
+          "organizationIdentifier": "orgId1",
+          "commonName": "Common Name",
+          "emailAddress": "email@example.com",
+          "serialNumber": "serialNumber1",
+          "organization": "Organization Name",
+          "country": "Country"
+        },
+        "mandatee": {
+          "id": "personId1",
+          "first_name": "First",
+          "last_name": "Last",
+          "gender": "Gender",
+          "email": "email@example.com",
+          "mobile_phone": "+1234567890"
+        },
+        "power": [
+          {
+            "id": "powerId1",
+            "tmf_type": "Domain",
+            "tmf_domain": ["SomeDomain"],
+            "tmf_function": "SomeFunction",
+            "tmf_action": ["SomeAction"]
+          }
+        ],
+        "life_span": {
+          "start_date_time": "2024-04-02T09:23:22.637345122Z",
+          "end_date_time": "2025-04-02T09:23:22.637345122Z"
+        }
+      }
+    },
+    status: CredentialStatus.ISSUED
+  };
+
+  walletServiceSpy.deleteVC.mockReturnValue(of('Success'));
+  jest.spyOn(component, 'loadCredentials');
+  component.vcDelete(testCredential);
+
+  expect(walletServiceSpy.deleteVC).toHaveBeenCalledWith(testCredential.id);
+  
+  tick();
+  
+  expect(component.loadCredentials).toHaveBeenCalled();
+}));
+
+it('should generate credential after websocket connection, update list and close connection', fakeAsync(() => {
+  const mockCredentialOfferUri = 'mockCredentialOfferUri';
+  jest.spyOn(component, 'loadCredentials');
+
+  component.credentialOfferUri = mockCredentialOfferUri;
+  component.generateCred();
+
+  tick(1000);
+  expect(websocketServiceSpy.connect).toHaveBeenCalled();
+  expect(walletServiceSpy.requestCredential).toHaveBeenCalledWith(mockCredentialOfferUri);
+  expect(component.loadCredentials).toHaveBeenCalled();
+  expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
+  
+}));
+
+ it('should close websocket connection after credential request', fakeAsync(() => {
+    component.credentialOfferUri = 'mockCredentialOfferUri';
+    component.generateCred();
+
+    tick(1000);
+    expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
+    expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
+  }));
+
+it('generate credential error should be handled closing connection', fakeAsync(()=>{
+  walletServiceSpy.requestCredential.mockReturnValue(throwError(()=>new HttpErrorResponse({
+  })));
+
+  component.generateCred();
+  flush();
+
+  expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
+  expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
+}));
+
+it('should navigate keeping query params', fakeAsync(()=>{
+  jest.spyOn(mockRouter, 'navigate');
+  const uri = 'randomUri'
+  component.navigateWithParamsTo(uri);
+  tick();
+  expect(mockRouter.navigate).toHaveBeenCalledWith([uri],  { 
+    queryParamsHandling: 'preserve'
+  });
+})); 
+
+it('should navigate keeping params and prevent event default', ()=>{
+    let randomEvent: any = {key: 'randomKey', preventDefault: ()=>''}
+    const preventDefaultSpy = jest.spyOn(randomEvent, 'preventDefault');
+    jest.spyOn(component, 'navigateWithParamsTo');
+
+    component.handleButtonKeydown(randomEvent, 'scan');
+    expect(component.navigateWithParamsTo).not.toHaveBeenCalled();
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+
+    
+    let enterEvent: any = {key: 'Enter', preventDefault: ()=>''};
+    const preventEnterDefaultSpy = jest.spyOn(enterEvent, 'preventDefault');
+
+    component.handleButtonKeydown(enterEvent, 'not-scan');
+    expect(component.navigateWithParamsTo).not.toHaveBeenCalled();
+    expect(preventEnterDefaultSpy).toHaveBeenCalled();
+
+    component.handleButtonKeydown(enterEvent, 'scan');
+    expect(component.navigateWithParamsTo).toHaveBeenCalledWith('tabs/credentials/scanner');
+    expect(preventEnterDefaultSpy).toHaveBeenCalledTimes(2);
+
+    let spaceEvent:any = {key: ' ', preventDefault: ()=>''};
+    const preventSpaceDefaultSpy = jest.spyOn(spaceEvent, 'preventDefault');
+
+    component.handleButtonKeydown(spaceEvent, 'scan');
+    expect(component.navigateWithParamsTo).toHaveBeenCalled();
+    expect(preventSpaceDefaultSpy).toHaveBeenCalled();
+
+});
+
+  it('should delay', fakeAsync(() => {
+    const promise = (component as any).delay(1000);
+    let isPromisedResolved = false;
+    promise.then(()=>{
+      isPromisedResolved = true;
+    });
+    expect(isPromisedResolved).toBe(false);
+
+    tick(1000);
+    expect(isPromisedResolved).toBe(true);
+
+  }));
 
   it('should only log error if text is not did-text nor endpoint-text', async () => {
     const clipboardSpy = jest.spyOn(navigator.clipboard, 'writeText');
@@ -240,212 +436,6 @@ describe('CredentialsPage', () => {
     await component.copyToClipboard(textToCopy);
 
     expect(clipboardSpy).toHaveBeenCalledWith('inner text');
-  });
-
-  it('should generate credential after websocket connection', () => {
-    const mockCredentialOfferUri = 'mockCredentialOfferUri';
-
-    component.credentialOfferUri = mockCredentialOfferUri;
-    component.generateCred();
-
-    setTimeout(()=>{
-      expect(walletServiceSpy.requestCredential).toHaveBeenCalledWith(mockCredentialOfferUri);
-      expect(websocketServiceSpy.connect).toHaveBeenCalled();
-    }, 1000);
-  });
-
-  it('should update the credential list when fetchCredentials is called',  async () => {
-    const mockCredList: VerifiableCredential[] = mockVCList;
-
-    walletServiceSpy.getAllVCs.mockReturnValue(of(mockCredList));
-
-    component.fetchCredentials();
-
-    expect(component.credList).toEqual(mockCredList.reverse());
-  });
-
-
-  it('vcDelete should call deleteVC on the wallet service with the correct ID and fetchCredentials the list', () => {
-    const testCredential: VerifiableCredential = {
-      "@context": ["https://www.w3.org/ns/credentials/v2"],
-      "id": "testCredentialId",
-      "type": ["VerifiableCredential", "SomeType"],
-      "issuer": {
-        "id": "issuerId1"
-      },
-      "issuanceDate": "2024-04-02T09:23:22.637345122Z",
-      "validFrom": "2024-04-02T09:23:22.637345122Z",
-      "expirationDate": "2025-04-02T09:23:22.637345122Z",
-      "credentialSubject": {
-        "mandate": {
-          "id": "mandateId1",
-          "mandator": {
-            "organizationIdentifier": "orgId1",
-            "commonName": "Common Name",
-            "emailAddress": "email@example.com",
-            "serialNumber": "serialNumber1",
-            "organization": "Organization Name",
-            "country": "Country"
-          },
-          "mandatee": {
-            "id": "personId1",
-            "first_name": "First",
-            "last_name": "Last",
-            "gender": "Gender",
-            "email": "email@example.com",
-            "mobile_phone": "+1234567890"
-          },
-          "power": [
-            {
-              "id": "powerId1",
-              "tmf_type": "Domain",
-              "tmf_domain": ["SomeDomain"],
-              "tmf_function": "SomeFunction",
-              "tmf_action": ["SomeAction"]
-            }
-          ],
-          "life_span": {
-            "start_date_time": "2024-04-02T09:23:22.637345122Z",
-            "end_date_time": "2025-04-02T09:23:22.637345122Z"
-          }
-        }
-      },
-      status: CredentialStatus.ISSUED
-    };
-
-    walletServiceSpy.deleteVC.mockReturnValue(of('Success'));
-    jest.spyOn(component, 'fetchCredentials');
-    component.vcDelete(testCredential);
-    expect(walletServiceSpy.deleteVC).toHaveBeenCalledWith(testCredential.id);
-    expect(component.fetchCredentials).toHaveBeenCalled();
-  });
-
-  it('qrCodeEmit should process QR code after websocket connection', () => {
-    jest.spyOn(mockRouter, 'navigate');
-    const testQrCode = "someTestQrCode";
-
-    component.qrCodeEmit(testQrCode);
-
-    setTimeout(()=>{
-      expect(walletServiceSpy.executeContent).toHaveBeenCalledWith(testQrCode);
-      expect(websocketServiceSpy.connect).toHaveBeenCalled();
-      expect(mockRouter.navigate).toHaveBeenCalledWith(['/tabs/vc-selector/'], { queryParams: { executionResponse: JSON.stringify({}) } });
-    }, 1000);
-  });
-
-
-  it('should handle alert Cancel correctly', async () => {
-    const alertCreateSpy = jest.spyOn(alertController, 'create');
-    await component.credentialClick();
-
-    expect(alertCreateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        header: expect.any(String),
-        message: expect.any(String),
-        buttons: expect.arrayContaining([
-          expect.objectContaining({
-            text: expect.any(String),
-            role: 'cancel',
-            handler: expect.any(Function)
-          }),
-          expect.objectContaining({
-            text: expect.any(String),
-            handler: expect.any(Function)
-          }),
-        ]),
-      })
-    );
-    const alert = await alertCreateSpy.mock.results[0].value;
-    expect(alert.present).toHaveBeenCalled();
-  });
-
-
-  it('should close websocket connection after credential request', () => {
-    component.credentialOfferUri = 'mockCredentialOfferUri';
-    component.generateCred();
-
-    setTimeout(()=>{
-      expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
-      expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
-    }, 1000);
-  });
-
-  it('should close websocket connection if an error occurs', () => {
-    jest.spyOn(walletServiceSpy, 'requestCredential').mockReturnValueOnce(throwError(() => new Error('Test error')));
-
-    component.credentialOfferUri = 'mockCredentialOfferUri';
-    component.generateCred();
-
-    setTimeout(()=>{
-      expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
-      expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
-    }, 1000);
-  });
-
-
-  it('should log error to cameraLogsService when executeContent fails', () => {
-    const mockErrorResponse = {
-      error: {
-        title: 'Test Error Title',
-        message: 'Test Error Message',
-        path: '/test/error/path'
-      }
-    };
-    const errorMessage = `${mockErrorResponse.error.title} . ${mockErrorResponse.error.message} . ${mockErrorResponse.error.path}`;
-
-    jest.spyOn(walletServiceSpy, 'executeContent').mockReturnValueOnce(throwError(() => mockErrorResponse));
-
-    const addCameraLogSpy = jest.spyOn((component as any).cameraLogsService, 'addCameraLog');
-
-    component.qrCodeEmit('someQrCode');
-    setTimeout(()=>{
-      expect(component.toggleScan).toBe(true);
-      expect(addCameraLogSpy).toHaveBeenCalledWith(new Error(errorMessage), 'httpError');
-    }, 1000);
-  });
-
-  it('untoggleScan function should set toggleScan to false', ()=>{
-    component.untoggleScan();
-    expect(component.toggleScan).toBe(false);
-  });
-
-  it('should call requestCredential and navigate on success', () => {
-    const scanSpy = jest.spyOn(component, 'scan');
-    const clickSpy = jest.spyOn(component, 'credentialClick');
-    let event: any = {key: 'randomKey', preventDefault: ()=>''}
-    let action = 'scan';
-    const preventDefaultSpy = jest.spyOn(event, 'preventDefault');
-
-    component.handleButtonKeydown(event, action);
-
-    expect(preventDefaultSpy).toHaveBeenCalledTimes(0);
-    expect(scanSpy).toHaveBeenCalledTimes(0);
-    expect(clickSpy).toHaveBeenCalledTimes(0);
-
-    event.key = 'Enter';
-    component.handleButtonKeydown(event, action);
-    expect(preventDefaultSpy).toHaveBeenCalledTimes(1);
-    expect(scanSpy).toHaveBeenCalledTimes(1);
-    expect(clickSpy).toHaveBeenCalledTimes(0);
-
-    event.key = ' ';
-    component.handleButtonKeydown(event, action);
-    expect(preventDefaultSpy).toHaveBeenCalledTimes(2);
-    expect(scanSpy).toHaveBeenCalledTimes(2);
-    expect(clickSpy).toHaveBeenCalledTimes(0);
-
-    action = 'getCredential';
-    component.handleButtonKeydown(event, action);
-    expect(preventDefaultSpy).toHaveBeenCalledTimes(3);
-    expect(scanSpy).toHaveBeenCalledTimes(2);
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-
-    action = 'randomAction';
-    component.handleButtonKeydown(event, action);
-    expect(preventDefaultSpy).toHaveBeenCalledTimes(4);
-    expect(scanSpy).toHaveBeenCalledTimes(2);
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-
   });
 
 });

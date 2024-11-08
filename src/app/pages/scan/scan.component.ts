@@ -20,9 +20,7 @@ import { WebsocketService } from 'src/app/services/websocket.service';
   imports:[    
     IonicModule,
     CommonModule,
-    FormsModule,
     QRCodeModule,
-    TranslateModule,
     BarcodeScannerComponent,
     VcViewComponent
   ]

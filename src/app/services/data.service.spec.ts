@@ -31,7 +31,7 @@ describe('DataService', () => {
   it('listenDid should return BehaviorSubject', () => {
     const did = service.listenDid();
     expect(did).toBeInstanceOf(BehaviorSubject);
-    expect(did.getValue()).toBe('');
+    expect(did.getValue()).toBe(undefined);
   });
 
   it('getDid should make GET request and update didSubject', () => {
