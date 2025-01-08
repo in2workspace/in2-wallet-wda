@@ -11,7 +11,7 @@
   window["env"]["scope"] = 'openid profile email offline_access';
   window["env"]["grant_type"] = 'code';
   window["env"]["execute_content_uri"] = '/api/v2/execute-content';
-  window["env"]["request_credential_uri"] = '/api/v2/request-credential';
+  window["env"]["request_credential_uri"] = '/api/v2/openid-credential-offer';
   window["env"]["verifiable_presentation_uri"] = '/api/v2/verifiable-presentation';
   window["env"]["credentials_uri"] = '/api/v2/credentials';
   window["env"]["credentials_by_id_uri"] = '/api/v2/credentials?credentialId=';

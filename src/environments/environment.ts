@@ -11,7 +11,7 @@ export const environment = {
   },
   server_uri: {
     execute_content_uri: '/api/v1/execute-content',
-    request_credential_uri: '/api/v1/request-credential',
+    request_credential_uri: '/api/v1/openid-credential-offer',
     verifiable_presentation_uri: '/api/v1/vp',
     credentials_uri: '/api/v1/credentials',
     credentials_by_id_uri: '/api/v1/credentials?credentialId=',

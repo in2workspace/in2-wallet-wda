@@ -19,6 +19,17 @@ export const routes: Routes = [
         data: { credentialOfferUri: 'credentialOfferUri' },
         loadComponent: () =>
           import('./pages/home/home.page').then((m) => m.HomePage),
+        children: [
+          {
+            path: 'openid-credential-offer',
+            canActivate: [AutoLoginPartialRoutesGuard],
+            data: { credentialOfferUri: 'credentialOfferUri' },
+            loadComponent: () =>
+              import('./pages/credentials/credentials.page').then(
+                (m) => m.CredentialsPage
+              ),
+          }
+        ]
       },
       {
         path: 'credentials',

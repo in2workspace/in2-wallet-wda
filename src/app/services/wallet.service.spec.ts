@@ -119,7 +119,7 @@ describe('WalletService', () => {
       message: 'Credential request successful',
     };
 
-    service.requestCredential(mockCredentialOfferUri).subscribe((response) => {
+    service.requestOpenidCredentialOffer(mockCredentialOfferUri).subscribe((response) => {
       expect(response).toEqual(expectedResponse);
       done();
     });

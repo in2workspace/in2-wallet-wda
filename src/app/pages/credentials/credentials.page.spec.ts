@@ -39,7 +39,7 @@ describe('CredentialsPage', () => {
 
     walletServiceSpy = {
       getAllVCs: jest.fn().mockReturnValue(of([])),
-      requestCredential: jest.fn().mockReturnValue(of({} as any)),
+      requestOpenidCredentialOffer: jest.fn().mockReturnValue(of({} as any)),
       deleteVC: jest.fn(),
       executeContent: jest.fn().mockReturnValue(of({} as any))
     } as unknown as jest.Mocked<WalletService>;
@@ -134,9 +134,9 @@ describe('CredentialsPage', () => {
     component.generateCred();
 
     // Avanzar el tiempo para simular el retraso en la conexión del WebSocket
-    tick(1000);
+    tick(4000);
 
-    expect(walletServiceSpy.requestCredential).toHaveBeenCalledWith(mockCredentialOfferUri);
+    expect(walletServiceSpy.requestOpenidCredentialOffer).toHaveBeenCalledWith(mockCredentialOfferUri);
     expect(websocketServiceSpy.connect).toHaveBeenCalled();
   }));
 
@@ -340,14 +340,14 @@ describe('CredentialsPage', () => {
     component.generateCred();
 
     // Simulamos el retraso para que se complete la conexión y solicitud
-    tick(1000);
+    tick(4000);
 
-    expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
+    expect(walletServiceSpy.requestOpenidCredentialOffer).toHaveBeenCalled();
     expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
   }));
 
   it('should close websocket connection if an error occurs', fakeAsync(() => {
-    jest.spyOn(walletServiceSpy, 'requestCredential').mockReturnValueOnce(throwError(() => new Error('Test error')));
+    jest.spyOn(walletServiceSpy, 'requestOpenidCredentialOffer').mockReturnValueOnce(throwError(() => new Error('Test error')));
 
     component.credentialOfferUri = 'mockCredentialOfferUri';
     component.generateCred();
@@ -355,7 +355,7 @@ describe('CredentialsPage', () => {
     // Simulamos el retraso para que se complete la conexión y solicitud
     tick(1000);
 
-    expect(walletServiceSpy.requestCredential).toHaveBeenCalled();
+    expect(walletServiceSpy.requestOpenidCredentialOffer).toHaveBeenCalled();
     expect(websocketServiceSpy.closeConnection).toHaveBeenCalled();
   }));
 

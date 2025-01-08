@@ -54,7 +54,6 @@ export class CredentialsPage implements OnInit {
   public credentialOfferUri = '';
   public ebsiFlag = false;
   public did = '';
-  public isCredOffer = false;
 
   private walletService = inject(WalletService);
   private router = inject(Router);
@@ -185,11 +184,7 @@ export class CredentialsPage implements OnInit {
             if (qrCode.includes('credential_offer_uri')) {
               this.from = 'credential';
               this.okMessage();
-              setTimeout(() => {
-                this.isAlertOpen = false;
-                this.scaned_cred = false;
-              }, TIME_IN_MS);
-              this.refresh();
+              this.successRefresh();
             } else {
               // login from verifier
               this.show_qr = false;
@@ -217,7 +212,7 @@ export class CredentialsPage implements OnInit {
             setTimeout(()=>{
               this.router.navigate(['/tabs/home'])
             }, 1000);
-            
+
           },
         });
     });
@@ -228,9 +223,10 @@ export class CredentialsPage implements OnInit {
 
     // Esperar un segundo antes de continuar
     this.delay(1000).then(() => {
-      this.walletService.requestCredential(this.credentialOfferUri).subscribe({
+      this.walletService.requestOpenidCredentialOffer(this.credentialOfferUri).subscribe({
         next: () => {
-          this.refresh();
+          this.okMessage();
+          this.successRefresh();
           this.websocket.closeConnection();
         },
         error: (err) => {
@@ -302,13 +298,21 @@ export class CredentialsPage implements OnInit {
       `,
       cssClass: 'custom-alert-ok',
     });
-  
+
     await alert.present();
-  
+
     setTimeout(async () => {
       await alert.dismiss();
       this.refresh();
     }, 2000);
+  }
+
+  private successRefresh(): void {
+    setTimeout(() => {
+      this.isAlertOpen = false;
+      this.scaned_cred = false;
+    }, TIME_IN_MS);
+    this.refresh();
   }
 
 }
